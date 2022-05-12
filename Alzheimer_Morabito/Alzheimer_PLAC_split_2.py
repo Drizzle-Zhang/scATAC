@@ -329,58 +329,49 @@ if __name__ == '__main__':
     # df_meta['celltype'] = df_meta.apply(lambda x: f"{x['Diagnosis']}_{x['Cell.Type']}", axis=1)
 
     # QC
-    dataset_AD_Control.quality_control(min_features=300, max_features=5000, min_cells=20)
-
-    # sample cells
+    # dataset_AD_Control.quality_control(min_features=300, max_features=5000, min_cells=50)
     cells_overlap = set(df_meta.index).intersection(set(dataset_AD_Control.adata.obs.index))
     df_meta = df_meta.loc[cells_overlap, :]
     random.seed(12345)
-    df_meta_control = df_meta.loc[df_meta['Diagnosis'] == 'Control', :]
-    cells_control = random.sample(list(df_meta_control.index), 15000)
-    df_meta_AD = df_meta.loc[df_meta['Diagnosis'] == 'AD', :]
-    cells_AD = random.sample(list(df_meta_AD.index), 15000)
-    df_meta_sample = pd.concat([df_meta_control.loc[cells_control, :],
-                                df_meta_AD.loc[cells_AD, :]], axis=0)
-    cells_sample = df_meta_sample.index
-    dataset_AD_Control.adata = dataset_AD_Control.adata[cells_sample, :]
-    dataset_AD_Control.adata.obs = pd.concat([df_meta_sample, dataset_AD_Control.adata.obs], axis=1)
-    dataset_AD_Control.adata.obs['celltype'] = df_meta_sample['Cell.Type']
-
-    # select peaks
-    dataset_AD_Control.select_genes(num_peak=120000)
-    file_gene_hg38 = '/root/scATAC/Gene_anno/Gene_hg38/promoters.up2k.protein.gencode.v38.bed'
-    dataset_AD_Control.add_promoter(file_gene_hg38)
-
-    # PLAC
-    path_hic = '/root/scATAC/pcHi-C/Cortex_PLACSeq/hg38'
-    dataset_AD_Control.build_graph(path_hic)
-    df_graph_PLAC = dataset_AD_Control.df_graph
-
-    # save data
-    file_atac_AD_Control = os.path.join(path_AD_Control, 'dataset_atac.pkl')
-    with open(file_atac_AD_Control, 'wb') as w_pkl:
-        str_pkl = pickle.dumps(dataset_AD_Control)
-        w_pkl.write(str_pkl)
-
-    # read data
-    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
-    file_atac_AD_Control = os.path.join(path_AD_Control, 'dataset_atac.pkl')
-    with open(file_atac_AD_Control, 'rb') as r_pkl:
-        dataset_AD_Control = pickle.loads(r_pkl.read())
 
     # Control
     dataset_Control = copy.deepcopy(dataset_AD_Control)
+    df_meta_control = df_meta.loc[df_meta['Diagnosis'] == 'Control', :]
+    cells_control = random.sample(list(df_meta_control.index), 30000)
+    df_meta_control = df_meta_control.loc[cells_control, :]
     dataset_Control.adata = dataset_Control.adata[cells_control, :]
-    dataset_Control.adata_merge = dataset_Control.adata_merge[cells_control, :]
+    dataset_Control.adata.obs = pd.concat([df_meta_control, dataset_Control.adata.obs], axis=1)
+    dataset_Control.adata.obs['celltype'] = df_meta_control['Cell.Type']
+
+    dataset_Control.quality_control(min_features=300, max_features=5000, min_cells=30)
+    dataset_Control.select_genes(num_peak=90000)
+    file_gene_hg38 = '/root/scATAC/Gene_anno/Gene_hg38/promoters.up2k.protein.gencode.v38.bed'
+    dataset_Control.add_promoter(file_gene_hg38)
+
+    path_hic = '/root/scATAC/pcHi-C/Cortex_PLACSeq/hg38'
+    dataset_Control.build_graph(path_hic)
+    # df_graph_PLAC = dataset_Control.df_graph
+
     dataset_Control.generate_data_list()
     list_graph_data_Control = dataset_Control.list_graph
     path_graph_input_Control = os.path.join(path_AD_Control, 'input_graph_Control')
     os.system(f"rm -rf {path_graph_input_Control}")
     os.mkdir(path_graph_input_Control)
     dataset_atac_graph_Control = ATACGraphDataset(path_graph_input_Control, list_graph_data_Control)
+    # # save data
+    # file_atac_AD_Control = os.path.join(path_AD_Control, 'dataset_atac.pkl')
+    # with open(file_atac_AD_Control, 'wb') as w_pkl:
+    #     str_pkl = pickle.dumps(dataset_AD_Control)
+    #     w_pkl.write(str_pkl)
+    #
+    # # read data
+    # path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
+    # file_atac_AD_Control = os.path.join(path_AD_Control, 'dataset_atac.pkl')
+    # with open(file_atac_AD_Control, 'rb') as r_pkl:
+    #     dataset_AD_Control = pickle.loads(r_pkl.read())
 
-    # dataset_atac_graph_Control.find_neighbors()
-    # dataset_atac_graph_Control.plot_umap()
+    # dataset_Control.find_neighbors()
+    # dataset_Control.plot_umap()
 
     # AD
     dataset_AD = copy.deepcopy(dataset_AD_Control)
@@ -403,27 +394,27 @@ if __name__ == '__main__':
     print(time_end - time_start)
 
     # Control
-    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_merge_split'
+    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
     path_graph_input_Control = os.path.join(path_AD_Control, 'input_graph_Control')
     dataset_atac_graph_Control = ATACGraphDataset(path_graph_input_Control)
     torch.manual_seed(12345)
     datasets_Control = dataset_atac_graph_Control.shuffle()
-    train_dataset = datasets_Control[:12000]
-    test_dataset = datasets_Control[12000:]
+    train_dataset = datasets_Control[:23000]
+    test_dataset = datasets_Control[23000:]
 
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     model = GCN(input_channels=datasets_Control.num_node_features,
                 output_channels=datasets_Control.num_classes, hidden_channels=8,
                 num_nodes=dataset_atac_graph_Control[0].num_nodes).to(device)
     criterion = torch.nn.CrossEntropyLoss()
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # train model
     time_start = time()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    for epoch in range(1, 50):
+    for epoch in range(1, 20):
         train(train_loader)
         train_acc = test(train_loader)
         test_acc = test(test_loader)
@@ -435,14 +426,14 @@ if __name__ == '__main__':
     print(time_end - time_start)
 
     # explain model
-    all_loader = DataLoader(dataset_atac_graph_Control, batch_size=32, shuffle=True)
+    all_loader = DataLoader(dataset_atac_graph_Control, batch_size=64, shuffle=True)
     list_dict = []
     method = 'ig'
     i = 0
     for data in all_loader:
         data = data.to(device)
-        out = model(data.x, data.edge_index, data.batch)
-        pred = out.argmax(dim=1)
+        # out = model(data.x, data.edge_index, data.batch)
+        # pred = out.argmax(dim=1)
         target = data.y
         input_mask = (torch.ones(data.edge_index.shape[1])*1).requires_grad_(True).to(device)
         # dl = attr.DeepLift(model_forward)
@@ -461,30 +452,31 @@ if __name__ == '__main__':
         sub_edge_index = data.edge_index.cpu().numpy()
         col_edge = [(sub_edge_index[0, i], sub_edge_index[1, i]) for i in range(num_col)]
         sub_df = pd.DataFrame(edge_mask, columns=col_edge, index=data.cell)
-        list_dict.append(sub_df.loc[(pred == target).cpu().detach().numpy(), :].dropna(axis=0))
+        # list_dict.append(sub_df.loc[(pred == target).cpu().detach().numpy(), :].dropna(axis=0))
+        list_dict.append(sub_df)
         i = i + 1
-        if i >= 10:
+        if i >= 100:
             break
     df_weight_Control = pd.concat(list_dict)
 
-    # save weight
-    file_weight = os.path.join(path_AD_Control, 'weight_atac_Control.pkl')
-    with open(file_weight, 'wb') as w_pkl:
-        str_pkl = pickle.dumps(df_weight_Control)
-        w_pkl.write(str_pkl)
-
-    # read weight
-    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
-    file_weight = os.path.join(path_AD_Control, 'weight_atac_Control.pkl')
-    with open(file_weight, 'rb') as r_pkl:
-        df_weight = pickle.loads(r_pkl.read())
+    # # save weight
+    # file_weight = os.path.join(path_AD_Control, 'weight_atac_Control.pkl')
+    # with open(file_weight, 'wb') as w_pkl:
+    #     str_pkl = pickle.dumps(df_weight_Control)
+    #     w_pkl.write(str_pkl)
+    #
+    # # read weight
+    # path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
+    # file_weight = os.path.join(path_AD_Control, 'weight_atac_Control.pkl')
+    # with open(file_weight, 'rb') as r_pkl:
+    #     df_weight = pickle.loads(r_pkl.read())
 
     adata_edge_Control = ad.AnnData(X=df_weight_Control,
-                            obs=dataset_Control.adata.obs.loc[df_weight_Control.index, :])
+                                    obs=dataset_Control.adata.obs.loc[df_weight_Control.index, :])
     adata_edge_Control.raw = adata_edge_Control.copy()
     # sc.pp.normalize_total(adata)
     # sc.pp.log1p(adata)
-    sc.pp.highly_variable_genes(adata_edge_Control, n_top_genes=10000, flavor='seurat')
+    sc.pp.highly_variable_genes(adata_edge_Control, n_top_genes=5000, flavor='seurat')
     adata_Control = adata_edge_Control[:, adata_edge_Control.var.highly_variable]
     sc.pp.scale(adata_Control, max_value=10)
     sc.tl.pca(adata_Control, svd_solver='arpack', n_comps=100)

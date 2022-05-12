@@ -323,13 +323,16 @@ if __name__ == '__main__':
     path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control'
     dataset_AD_Control = ATACDataset(data_root=path_AD_Control, raw_filename='AD_Control.h5ad')
     file_meta_tsv = os.path.join(path_AD_Control, 'metadata.csv')
+    df_meta = pd.read_csv(file_meta_tsv)
     df_meta.index = df_meta['Barcode']
     df_meta['celltype'] = df_meta.apply(lambda x: f"{x['Diagnosis']}_{x['Cell.Type']}", axis=1)
-    dataset_AD_Control.adata = dataset_AD_Control.adata[df_meta.index, :]
-    dataset_AD_Control.adata.obs = df_meta.loc[dataset_AD_Control.adata.obs.index, :]
+    cells_sample = random.sample(list(df_meta.index), 30000)
+    df_meta_sample = df_meta.loc[cells_sample, :]
+    dataset_AD_Control.adata = dataset_AD_Control.adata[df_meta_sample.index, :]
+    dataset_AD_Control.adata.obs = df_meta_sample.loc[dataset_AD_Control.adata.obs.index, :]
 
-    dataset_AD_Control.quality_control(min_features=300, min_cells=30)
-    dataset_AD_Control.select_genes(num_peak=120000)
+    dataset_AD_Control.quality_control(min_features=300, max_features=5000, min_cells=30)
+    dataset_AD_Control.select_genes(num_peak=80000)
     file_gene_hg38 = '/root/scATAC/Gene_anno/Gene_hg38/promoters.up2k.protein.gencode.v38.bed'
     dataset_AD_Control.add_promoter(file_gene_hg38)
 
@@ -345,8 +348,8 @@ if __name__ == '__main__':
     os.mkdir(path_graph_input)
     dataset_atac_graph = ATACGraphDataset(path_graph_input, list_graph_data)
 
-    dataset_AD_Control.find_neighbors()
-    dataset_AD_Control.plot_umap()
+    # dataset_AD_Control.find_neighbors()
+    # dataset_AD_Control.plot_umap()
     time_end = time()
     print(time_end - time_start)
 
@@ -367,8 +370,8 @@ if __name__ == '__main__':
     dataset_atac_graph = ATACGraphDataset(path_graph_input)
     torch.manual_seed(12345)
     dataset = dataset_atac_graph.shuffle()
-    train_dataset = dataset[:100000]
-    test_dataset = dataset[100000:]
+    train_dataset = dataset[:23000]
+    test_dataset = dataset[23000:]
 
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     model = GCN(input_channels=dataset.num_node_features,
@@ -376,13 +379,13 @@ if __name__ == '__main__':
                 num_nodes=dataset_atac_graph[0].num_nodes).to(device)
     criterion = torch.nn.CrossEntropyLoss()
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # train model
     time_start = time()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    for epoch in range(1, 50):
+    for epoch in range(1, 40):
         train(train_loader)
         train_acc = test(train_loader)
         test_acc = test(test_loader)
@@ -394,7 +397,7 @@ if __name__ == '__main__':
     print(time_end - time_start)
 
     # explain model
-    all_loader = DataLoader(dataset_atac_graph, batch_size=32, shuffle=True)
+    all_loader = DataLoader(dataset_atac_graph, batch_size=64, shuffle=True)
     list_dict = []
     method = 'ig'
     # i = 0
@@ -405,7 +408,7 @@ if __name__ == '__main__':
         # dl = attr.DeepLift(model_forward)
         # mask = dl.attribute(input_mask, target=target,
         #                     additional_forward_args=(data, model))
-        ig = IntegratedGradients(model_forward)
+        ig = IntegratedGradients(model_forward, multiply_by_inputs=False)
         mask = ig.attribute(
             input_mask, target=target, n_steps=50,
             additional_forward_args=(data, model),
@@ -419,7 +422,7 @@ if __name__ == '__main__':
         col_edge = [(sub_edge_index[0, i], sub_edge_index[1, i]) for i in range(num_col)]
         list_dict.append(pd.DataFrame(edge_mask, columns=col_edge, index=data.cell))
         # i = i + 1
-        # if i >= 10:
+        # if i >= 30:
         #     break
     df_weight = pd.concat(list_dict)
     # df_weight = df_weight.dropna()
@@ -437,7 +440,7 @@ if __name__ == '__main__':
     # with open(file_weight, 'rb') as r_pkl:
     #     df_weight = pickle.loads(r_pkl.read())
 
-    adata_edge = ad.AnnData(X=df_weight, obs=dataset_ATAC.adata.obs.loc[df_weight.index, :])
+    adata_edge = ad.AnnData(X=df_weight, obs=dataset_AD_Control.adata.obs.loc[df_weight.index, :])
     adata_edge.raw = adata_edge.copy()
     # sc.pp.normalize_total(adata)
     # sc.pp.log1p(adata)

@@ -330,6 +330,9 @@ if __name__ == '__main__':
 
     # QC
     dataset_AD_Control.quality_control(min_features=300, max_features=5000, min_cells=20)
+    dataset_AD_Control.select_genes(num_peak=100000)
+    file_gene_hg38 = '/root/scATAC/Gene_anno/Gene_hg38/promoters.up2k.protein.gencode.v38.bed'
+    dataset_AD_Control.add_promoter(file_gene_hg38)
 
     # sample cells
     cells_overlap = set(df_meta.index).intersection(set(dataset_AD_Control.adata.obs.index))
@@ -345,11 +348,6 @@ if __name__ == '__main__':
     dataset_AD_Control.adata = dataset_AD_Control.adata[cells_sample, :]
     dataset_AD_Control.adata.obs = pd.concat([df_meta_sample, dataset_AD_Control.adata.obs], axis=1)
     dataset_AD_Control.adata.obs['celltype'] = df_meta_sample['Cell.Type']
-
-    # select peaks
-    dataset_AD_Control.select_genes(num_peak=120000)
-    file_gene_hg38 = '/root/scATAC/Gene_anno/Gene_hg38/promoters.up2k.protein.gencode.v38.bed'
-    dataset_AD_Control.add_promoter(file_gene_hg38)
 
     # PLAC
     path_hic = '/root/scATAC/pcHi-C/Cortex_PLACSeq/hg38'
@@ -403,7 +401,7 @@ if __name__ == '__main__':
     print(time_end - time_start)
 
     # Control
-    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_merge_split'
+    path_AD_Control = '/root/scATAC/ATAC_data/Alzheimer_Morabito/AD_Control_split'
     path_graph_input_Control = os.path.join(path_AD_Control, 'input_graph_Control')
     dataset_atac_graph_Control = ATACGraphDataset(path_graph_input_Control)
     torch.manual_seed(12345)
@@ -438,7 +436,7 @@ if __name__ == '__main__':
     all_loader = DataLoader(dataset_atac_graph_Control, batch_size=32, shuffle=True)
     list_dict = []
     method = 'ig'
-    i = 0
+    # i = 0
     for data in all_loader:
         data = data.to(device)
         out = model(data.x, data.edge_index, data.batch)
@@ -462,9 +460,9 @@ if __name__ == '__main__':
         col_edge = [(sub_edge_index[0, i], sub_edge_index[1, i]) for i in range(num_col)]
         sub_df = pd.DataFrame(edge_mask, columns=col_edge, index=data.cell)
         list_dict.append(sub_df.loc[(pred == target).cpu().detach().numpy(), :].dropna(axis=0))
-        i = i + 1
-        if i >= 10:
-            break
+        # i = i + 1
+        # if i >= 10:
+        #     break
     df_weight_Control = pd.concat(list_dict)
 
     # save weight
